@@ -5,11 +5,11 @@ import re
 import unicodedata
 
 # Hidden characters: zero-width space/joiners, word joiner, BOM, soft hyphen.
-INVISIBLE = {"​", "‌", "‍", "⁠", "﻿", "­"}
+INVISIBLE = {"\u200b", "\u200c", "\u200d", "\u2060", "\ufeff", "\u00ad"}
 # Bidi controls: ALM, LRM/RLM, LRE/RLE/PDF/LRO/RLO, LRI/RLI/FSI/PDI.
-BIDI = {"؜", "‎", "‏", *map(chr, range(0x202A, 0x202F)), *map(chr, range(0x2066, 0x206A))}
+BIDI = {"\u061c", "\u200e", "\u200f", *map(chr, range(0x202A, 0x202F)), *map(chr, range(0x2066, 0x206A))}
 # Arabic tatweel (U+0640) and the harakat/other marks U+064B-U+065F and U+0670.
-ARABIC_MARKS = re.compile(r"[ـً-ٰٟ]")
+ARABIC_MARKS = re.compile("[\u0640\u064b-\u065f\u0670]")
 
 
 def _is_tag(ch: str) -> bool:
@@ -19,12 +19,18 @@ def _is_tag(ch: str) -> bool:
 
 def has_hidden_characters(text: str) -> bool:
     """True if `text` contains any invisible, bidi-control or Tags-block character."""
-    raise NotImplementedError
+    return any(ch in INVISIBLE or ch in BIDI or _is_tag(ch) for ch in text)
 
 
 def normalize(text: str) -> str:
     """Remove hidden characters, NFKC, strip Arabic tatweel/marks, casefold, collapse whitespace."""
-    raise NotImplementedError
+    text = "".join(
+        ch for ch in text if ch not in INVISIBLE and ch not in BIDI and not _is_tag(ch)
+    )
+    text = unicodedata.normalize("NFKC", text)
+    text = ARABIC_MARKS.sub("", text)
+    text = text.casefold()
+    return " ".join(text.split())
 
 
 # The exact patterns from README.md, "What to build", part 1. Do not add your own: the grader's
@@ -54,4 +60,11 @@ PATTERNS: dict[str, list[str]] = {
 
 def detect_injection(text: str) -> list[str]:
     """A sorted list of signal codes found in `text` (see README.md for the exact rules)."""
-    raise NotImplementedError
+    codes = set()
+    if has_hidden_characters(text):
+        codes.add("hidden_characters")
+    norm = normalize(text)
+    for code, patterns in PATTERNS.items():
+        if any(re.search(p, norm) for p in patterns):
+            codes.add(code)
+    return sorted(codes)
